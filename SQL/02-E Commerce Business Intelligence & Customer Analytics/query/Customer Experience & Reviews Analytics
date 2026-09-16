@@ -1,0 +1,228 @@
+---Customer Experience & Reviews Analytics
+
+--Q1. Review Score Distribution
+
+SELECT review_Score,
+COUNT(*) AS review_count,
+ROUND(
+COUNT(*)*100/
+SUM(COUNT(*)) OVER(),2
+) AS Percentage_of_total_reviews
+FROM order_reviews_dataset
+GROUP BY review_score
+ORDER BY review_score
+
+
+--Business Interpretation: Around 77% review score recorded for 4 and 5. where as 1-3 score 22% respectively.
+
+
+--Q2.Average Review Score by Product Category
+
+WITH Product_cat_with_reviews AS (
+SELECT R.review_id,
+R.review_score,
+P.product_category_name
+FROM order_reviews_dataset AS R
+INNER JOIN order_item_dataset AS OI
+ON R.order_id = OI.order_id
+INNER JOIN products_dataset AS P
+ON OI.product_id = P.product_id
+WHERE P.product_category_name IS NOT NULL)
+
+SELECT Product_category_name,
+COUNT(DISTINCT review_id) AS Number_of_Reviews,
+ROUND(AVG(Review_Score),2) AS Average_Review_Score
+FROM product_cat_with_reviews
+GROUP BY product_category_name
+HAVING COUNT(DISTINCT review_id) >=100
+ORDER BY Average_Review_Score ASC;
+
+
+--Business Interpretation : There are total 51 product categories
+--Which shows moveis_escritorio product category have less  reviews 3.49 with 1265 orders.
+--livros_interesse_geral have highest average score which is 4.45
+--there are total 16 product category which below 4 average review score.
+
+
+
+--Q3. Review Score and delivery Delay
+
+WITH Review_Score_with_duration AS(
+SELECT OD.order_id,
+OD.order_estimated_delivery_date,
+OD.order_Delivered_customer_date,
+OD.order_status,
+R.review_score
+FROM orders_dataset AS OD
+LEFT JOIN order_reviews_dataset AS R
+ON R.order_id = OD.order_id
+WHERE order_status = 'delivered' AND 
+OD.order_Delivered_customer_date IS NOT NULL AND
+OD.order_estimated_delivery_date IS NOT NULL)
+
+SELECT CASE	
+			WHEN order_Delivered_customer_date > order_estimated_Delivery_date THEN 'LATE'
+			ELSE 'EARLY OR ON-TIME'
+		END AS Delivery_performance_Group,
+COUNT(DISTINCT order_id) AS Number_of_reviewed_orders,
+ROUND(AVG(review_score),2) AS Average_review_Score,
+ROUND(COUNT(DISTINCT order_id)*100 / SUM(COUNT(DISTINCT order_id)) OVER(),2) AS Percentage_of_reviewed_orders
+FROM review_score_with_duration
+GROUP BY CASE	
+			WHEN order_Delivered_customer_date > order_estimated_Delivery_date THEN 'LATE'
+			ELSE 'EARLY OR ON-TIME'
+		END
+
+--Business Interpretation: It is clearly shows that "Late delivery" group receives average 2.57 score in the reviews from the customers
+-- Around 8.11 percentage of the review score is tagged to Late delivery Whereas around 92% positive review is for on time or early group.
+
+--Q4. Review score and freight cost
+
+
+WITH Review_Score_and_freight_cost AS (
+SELECT OI.order_id,
+SUM(OI.freight_value) AS freight_cost,
+R.review_score AS review_Score
+FROM order_item_Dataset AS OI
+INNER JOIN order_reviews_dataset AS R
+ON R.order_id = OI.order_id
+GROUP BY OI.order_id,R.review_score)
+
+SELECT CASE
+			WHEN freight_Cost <10 THEN 'Low'
+			WHEN Freight_Cost >=10 AND Freight_Cost <25 THEN 'Medium'
+			ELSE 'High'
+		END AS Freight_Group,
+	COUNT(DISTINCT order_id) AS Reviewed_orders,
+	ROUND(AVG(freight_cost),2) AS Average_freight_Cost_per_order,
+	ROUND(AVG(review_Score),2) AS Average_review_Score
+FROM Review_Score_and_freight_cost
+GROUP BY CASE
+			WHEN freight_Cost <10 THEN 'Low'
+			WHEN Freight_Cost >=10 AND Freight_Cost <25 THEN 'Medium'
+			ELSE 'High'
+		END
+ORDER BY CASE
+			WHEN freight_Cost <10 THEN 'Low'
+			WHEN Freight_Cost >=10 AND Freight_Cost <25 THEN 'Medium'
+			ELSE 'High'
+		END;
+
+
+--business Interpretation: The higher freight cost group has low satisfaction score by customer which shows that customers those who pay high for freight are not satisfied
+--Lower freight cost group customer are satisfied by their score 4.29 .further, medium freight group also satisfied with the cost which is 4.15
+
+
+--Q5. Sellers with poor customer Satisfaction
+
+
+SELECT OI.seller_id,
+COUNT(DISTINCT OI.order_id) AS Orders_Reviewed,
+ROUND(AVG(R.review_score),2) AS Average_review_Score,
+ROUND(COUNT(DISTINCT
+	CASE
+		WHEN R.review_score <=2 THEN OI.order_id
+	END
+)*100.0 / COUNT(DISTINCT OI.order_id),2) AS negative_reviews_Rate
+FROM order_item_dataset AS OI
+INNER JOIN order_reviews_dataset AS R
+ON R.order_id = OI.order_id
+GROUP BY OI.seller_id
+HAVING COUNT(DISTINCT OI.order_id) >=20
+ORDER BY Average_review_Score ASC
+LIMIT 10;
+
+-- Business Interpretation: Seller with less average review score is 2.10 with over 20 orders reviews and therefore 65% negative rate
+--investigation may be required for the product quality, delivery duration or others.
+
+
+
+--Q6. - High sales but low rated product categories
+
+WITH Product_sales_and_reviews AS (
+SELECT R.order_id,
+OI.price,
+R.review_Score,
+OI.product_id,
+P.product_Category_name
+FROM order_reviews_dataset AS R
+INNER JOIN order_item_Dataset AS OI
+ON R.order_id = OI.order_id
+INNER JOIN products_dataset AS P
+ON P.product_id = OI.product_id
+WHERE P.product_Category_name IS NOT NULL)
+
+SELECT product_Category_name,
+SUM(price) AS total_sales_Revenue,
+ROUND(AVG(review_Score),2) AS Average_review_Score,
+COUNT(DISTINCT order_id) AS Number_of_reviewed_orders,
+COUNT(product_id) AS sold_items
+FROM Product_sales_and_reviews
+GROUP BY product_category_name
+HAVING COUNT(DISTINCT order_id) >=100 AND COUNT(product_id) >=100
+ORDER BY total_sales_Revenue DESC;
+
+--Business Interpretation: In this output, It is evident that cama_mesa_banho product category is placed 3rd as sales revenue (1040140.31) with 3.90 average_review score along with 9313 orders
+--fashion_roupa_masculina has recorded 3.64 which is lowest among 51 product category with around 120 orders reviewed by customer.
+--Livros_interesse_geral is the highest average_review_score received by the customers with 508 orders.
+
+
+
+--Q7.Review Data Quality Validation
+
+
+--Check A - Invalid review scores
+SELECT review_id,
+review_Score
+FROM order_reviews_Dataset
+WHERE review_Score >5 OR review_Score <1 OR review_Score IS NULL;
+
+--Check B - Reviews without matching orders
+
+SELECT R.order_id AS review_orders,
+O.order_id AS item_orders
+FROM order_Reviews_Dataset AS R
+LEFT JOIN orders_dataset AS O
+ON O.order_id = R.order_id
+WHERE O.order_id IS NULL
+
+
+--Retrieved all blanks therefore we dont find any unmatched between review and the orders
+
+
+--Check C - Duplicate reviews per order
+
+
+SELECT R.order_id,
+COUNT(R.review_id) AS review_records
+FROM order_Reviews_dataset AS R
+GROUP BY R.order_id
+HAVING COUNT(R.review_id) >1
+
+
+--There are total 547 duplicate orders review records
+
+
+--Check D - Missing review dates
+
+SELECT R.review_id,
+R.review_creation_Date
+FROM order_Reviews_Dataset AS R
+WHERE R.review_creation_Date IS NULL OR review_answer_timestamp IS NULL
+
+-- Retrieved blank rows
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

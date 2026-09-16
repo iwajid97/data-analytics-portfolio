@@ -1,0 +1,210 @@
+-- Customer & Revenue Analytics
+
+
+--Q1. Monthly Order Volume
+
+
+SELECT DATE_TRUNC('month',order_purchase_timestamp) :: DATE AS Month_Period,
+COUNT(*) AS Orders
+FROM orders_Dataset
+GROUP BY DATE_TRUNC('month',order_purchase_timestamp) :: DATE
+ORDER BY Month_period;
+
+--Business findings : 2017 Nov month has recorded highest 7544 whereas 2016 Dec has only order.
+
+--Q2. Monthly revenue Trend
+
+WITH Orders_with_price AS(
+SELECT O.order_id,
+O.order_purchase_timestamp,
+OI.price
+FROM orders_dataset AS O
+INNER JOIN order_item_dataset AS OI
+ON OI.order_id = O.order_id
+)
+
+SELECT DATE_TRUNC('month',OP.order_purchase_timestamp) ::DATE AS MONTH_period,
+SUM(OP.Price) AS Total_revenue
+FROM Orders_with_price AS OP
+GROUP BY DATE_TRUNC('month',OP.order_purchase_timestamp) ::DATE 
+ORDER BY MONTH_period ASC;
+
+
+-- Business Interpretation: It is evident that below table shows the 10.90 sales recorded in Dec 2016 were lowest and 1010271.37 in Nov 2017 which is highest.
+
+
+--Q3. Average Order Value (AOV)
+
+--Average value across month
+WITH Orders_with_price AS(
+SELECT O.order_id,
+O.order_purchase_timestamp,
+OI.price
+FROM orders_dataset AS O
+INNER JOIN order_item_dataset AS OI
+ON OI.order_id = O.order_id
+),
+
+summarized_pricewith_order AS(
+SELECT order_id,
+order_purchase_timestamp,
+SUM(price) AS order_value
+FROM orders_with_price
+GROUP BY order_id, order_purchase_timestamp)
+
+SELECT DATE_TRUNC('month',order_purchase_timestamp) ::DATE AS MONTH_period,
+ROUND(AVG(order_value),2) AS Average_Value
+FROM summarized_pricewith_order
+GROUP BY DATE_TRUNC('month',order_purchase_timestamp) ::DATE 
+ORDER BY MONTH_period ASC;
+
+--Average value across product categories
+
+
+WITH product_with_value AS (
+SELECT OI.order_id,
+OI.product_id,
+OI.price,
+P.product_category_name
+FROM order_item_dataset AS OI
+INNER JOIN products_dataset AS P
+ON P.product_id = OI.product_id)
+
+SELECT PV.product_category_name,
+ROUND(AVG(PV.price),2) AS Average_value
+FROM product_with_value AS PV
+GROUP BY PV.product_category_name
+ORDER BY Average_value DESC;
+
+
+--Business definitions : I perform sql for both monthly wise average order values and product categories wise.
+-- It is evident that pcs are the highest average value in terms of product categories and 2018 SEP period have the 145 average value which is highest across period (Month)
+
+
+--Q4. Customer Repeat-purchase rate
+
+
+WITH customer_orders AS (
+SELECT C.customer_unique_id,
+COUNT(O.order_id) AS total_orders
+FROM customer_dataset AS C
+LEFT JOIN orders_dataset AS O
+ON O.customer_id = C.customer_id
+GROUP BY C.customer_unique_id   ),       -- Customer_unique_id with their order numbers
+
+repeated_customers AS (
+SELECT customer_unique_id
+FROM customer_orders
+WHERE total_orders >=2)
+
+
+SELECT COUNT(DISTINCT CO.customer_unique_id) AS unique_customers,
+COUNT(RC.customer_unique_id) AS repeated_customers,
+ROUND(COUNT(RC.customer_unique_id)::numeric / COUNT(DISTINCT CO.customer_unique_id)*100,2) AS repeated_rate
+FROM customer_orders AS CO
+LEFT JOIN repeated_customers AS RC
+ON RC.customer_unique_id = CO.customer_unique_id;
+
+
+-- Business Intrepetation . the output shows that 2997 customers have purchased multiple which indicate 3.12 percentage
+
+
+
+--Q5. One time vs repeated customers
+
+
+
+WITH Customer_orders AS (
+SELECT C.customer_unique_id,
+COUNT(O.order_id) AS orders
+FROM customer_dataset AS C
+LEFT JOIN orders_dataset AS O
+ON O.customer_id = C.customer_id
+GROUP BY C.customer_unique_id)
+
+SELECT SUM(CASE
+		WHEN CO.orders =1 THEN 1 ELSE
+		0
+		END )AS One_time,
+		SUM(CASE
+		WHEN CO.orders >1 THEN 1 ELSE 
+		0
+		END )AS repeat_customers
+FROM customer_orders AS CO;
+
+
+--Business interpretations : It is seen that 93099 customers have happened for only one time and 2997 has repeated purchases.
+
+
+--Q6.  Top customers by revenue
+
+
+WITH Customers_revenue AS (
+SELECT OI.order_id,
+OI.price,
+OD.customer_id,
+C.customer_unique_id
+FROM order_item_dataset AS OI
+LEFT JOIN orders_dataset AS OD
+ON OD.order_id = OI.order_id
+LEFT JOIN customer_dataset AS c
+ON c.customer_id = OD.customer_id)
+
+SELECT CR.customer_unique_id,
+SUM(CR.price) AS revenue
+FROM customers_revenue AS CR
+GROUP BY CR.customer_unique_id
+ORDER BY SUM(CR.price) DESC;
+
+-- Business Interpretation : This table shows that highest revenue is 13440 has recorded.
+
+--Q7. Revenue Contribution by customer segment
+
+
+
+WITH Customers_revenue AS (
+SELECT OI.order_id,
+OI.price,
+OD.customer_id,
+C.customer_unique_id
+FROM order_item_dataset AS OI
+LEFT JOIN orders_dataset AS OD
+ON OD.order_id = OI.order_id
+LEFT JOIN customer_dataset AS c
+ON c.customer_id = OD.customer_id),
+
+Customer_segment_table AS (
+SELECT CR.customer_unique_id,
+COUNT(DISTINCT CR.order_id) AS orders,
+SUM(CR.price) AS revenue,
+CASE
+	WHEN COUNT(DISTINCT CR.order_id) = 1 THEN 'ONE-TIME PURCHASE'
+	ELSE 'REPEATED PURCHASE'
+END AS Customers_Segment
+FROM customers_revenue AS CR
+GROUP BY CR.customer_unique_id)
+
+
+SELECT customers_segment,
+SUM(revenue) AS revenue,
+ROUND(SUM(revenue) *100.0 / (SELECT SUM(revenue) FROM customer_segment_table),2) AS revenue_contribution_percentage
+FROM customer_segment_table
+GROUP BY customers_segment;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

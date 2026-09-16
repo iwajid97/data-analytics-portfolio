@@ -1,0 +1,161 @@
+--Creating the respective tables
+
+
+--1. Customer dataset table (DIM)
+
+CREATE TABLE customer_dataset (
+    customer_id VARCHAR(100) PRIMARY KEY,
+    customer_unique_id VARCHAR(100),
+    customer_zip_code_prefix VARCHAR(50),
+    customer_city VARCHAR(50),
+	customer_state VARCHAR(10)
+);
+
+--INFO of each columns
+SELECT *
+FROM information_schema.columns
+WHERE table_name = 'customer_dataset'
+
+--2. geolocation table (DIM)
+
+CREATE TABLE geolocation_dataset (
+	geolocation_zip_code_prefix INT,
+	geolocation_lat NUMERIC(10,6),
+	geolocation_lng NUMERIC(10,6),
+	geolocation_city VARCHAR(100),
+	geolocation_state VARCHAR(10)
+);
+
+--INFO of each columns
+SELECT *
+FROM information_schema.columns
+WHERE table_name = 'geolocation_dataset'
+
+
+--3. order_item_dataset (FACT)
+
+CREATE TABLE order_item_dataset (
+	order_id VARCHAR(50),
+	order_item_id INT,
+	product_id VARCHAR(50),
+	seller_id VARCHAR(50),
+	shipping_limit_date TIMESTAMP,
+	price NUMERIC(10,2),
+	freight_value NUMERIC(10,2)
+);
+
+
+--INFO of each columns
+SELECT *
+FROM information_schema.columns
+WHERE table_name = 'order_item_dataset'
+
+--4. order_payments_dataset
+
+CREATE TABLE order_payments_dataset(
+	order_id VARCHAR(50),
+	payment_sequential INT,
+	payment_type VARCHAR(20),
+	payment_installments INT,
+	payment_value NUMERIC(10,2)
+);
+
+--INFO of each columns
+SELECT *
+FROM information_schema.columns
+WHERE table_name = 'order_payments_dataset'
+
+--5. order_reviews_dataset
+
+CREATE TABLE order_reviews_dataset (
+	review_id VARCHAR(50),
+	order_id VARCHAR(50),
+	review_score INT,
+	review_comment_title TEXT,
+	review_comment_message TEXT,
+	review_creation_date TIMESTAMP,
+	review_answer_timestamp TIMESTAMP);
+
+--INFO of each columns
+SELECT *
+FROM information_schema.columns
+WHERE table_name = 'order_reviews_dataset'
+
+--6. orders_dataset
+
+
+CREATE TABLE orders_dataset (
+	order_id VARCHAR(50),
+	customer_id VARCHAR(100),
+	order_status VARCHAR(20),
+	order_purchase_timestamp TIMESTAMP,
+	order_approved_at TIMESTAMP,
+	order_delivered_carrier_date TIMESTAMP,
+	order_delivered_customer_date TIMESTAMP,
+	order_estimated_delivery_date TIMESTAMP);
+
+
+--INFO of each columns
+SELECT *
+FROM information_schema.columns
+WHERE table_name = 'orders_dataset'
+
+
+--7. products_dataset
+
+CREATE TABLE products_dataset (
+	product_id VARCHAR(50),
+	product_category_name VARCHAR(50),
+	product_name_lenght INT,
+	product_description_lenght INT,
+	product_photos_qty INT,
+	product_weight_g INT,
+	product_length_cm INT,
+	product_height_cm INT,
+	product_width_cm INT);
+
+--INFO of each columns
+SELECT *
+FROM information_schema.columns
+WHERE table_name = 'products_dataset'
+
+
+--8. sellers_dataset
+
+
+CREATE TABLE sellers_dataset (
+	seller_id VARCHAR(50),
+	seller_zip_code_prefix INT,
+	seller_city VARCHAR(50),
+	seller_state VARCHAR(20)
+);
+
+--INFO of each columns
+SELECT *
+FROM information_schema.columns
+WHERE table_name = 'sellers_dataset'
+
+
+
+--9. product_category_name_translation
+
+
+CREATE TABLE product_category_name (
+	product_category_name VARCHAR(50),
+	product_category_name_english VARCHAR(50)
+);
+
+--INFO of each columns
+SELECT *
+FROM information_schema.columns
+WHERE table_name = 'product_category_name'
+
+
+
+
+
+
+
+
+
+	

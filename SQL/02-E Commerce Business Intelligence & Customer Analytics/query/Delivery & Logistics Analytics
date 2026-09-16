@@ -1,0 +1,211 @@
+-- Delivery & Logistics Analytics
+
+--Q1. Delivery Duration Analysis
+
+WITH Orders_duration AS (
+	SELECT DATE_TRUNC('month',order_purchase_timestamp):: DATE AS Month,
+		EXTRACT(EPOCH FROM (order_delivered_customer_date - order_purchase_timestamp))/86400 AS total_duration,
+		order_status
+	FROM orders_dataset
+		WHERE order_status = 'delivered' AND
+			EXTRACT(EPOCH FROM (order_delivered_customer_date - order_purchase_timestamp))/86400 IS NOT NULL)
+
+	SELECT OD.Month,
+		ROUND(AVG(OD.total_duration),2) AS Average_Delivery_Days
+	FROM Orders_duration AS OD
+	GROUP BY OD.Month
+	ORDER BY OD.Month;
+	
+	
+-- Business Interpretation : This result shows the highest value in the earliest month Whereas 
+-- Lowest delivery days in the month of december in 2016 which is positive.
+--Therefore 23 months have the average_delivery_days to identify the duration of the delivery
+
+
+--Q2. Late Delivery Analysis
+
+
+WITH Orders_late_data AS (
+SELECT order_id,
+order_purchase_timestamp,
+order_estimated_delivery_date,
+order_delivered_customer_date,
+(order_delivered_customer_date > order_estimated_delivery_date) AS orders_status_boolean
+FROM orders_dataset
+WHERE order_status = 'delivered' AND 
+	order_delivered_customer_date IS NOT NULL AND
+	order_estimated_Delivery_date IS NOT NULL)
+	
+SELECT COUNT(order_id) AS Total_delivered_orders,
+COUNT(order_id) FILTER (WHERE orders_status_boolean IS true )AS Late_orders,
+ROUND((COUNT(order_id) FILTER (WHERE orders_status_boolean IS true ) ::numeric/ COUNT(order_id))*100 ,2) AS Late_Orders_rate
+FROM orders_late_data;
+
+		
+-- Business Interpretation : - This report shows that around 8% orders are being delayed.
+-- It could be the lack of data as starting and ending months are not fullfilled
+--96478 are successfully delivered 
+--and 7826 orders are delayed as per the estimate delivered
+
+
+
+--Q3.Delivery Performance by Customer State
+
+
+WITH State_delivery_record AS (
+SELECT OD.order_id, 
+OD.customer_id,
+C.customer_state,
+OD.order_status,
+ROUND(EXTRACT(EPOCH FROM (order_delivered_customer_Date - order_purchase_timestamp))/86400,2) AS total_duration
+FROM orders_dataset AS OD
+LEFT JOIN customer_dataset AS C
+ON OD.customer_id = C.customer_id
+WHERE OD.order_status = 'delivered' AND
+	OD.order_delivered_customer_date IS NOT NULL)
+
+SELECT Customer_state,
+COUNT(DISTINCT order_id) AS Delivered_orders,
+ROUND(AVG(total_duration),2) AS Average_delivery_days
+FROM state_delivery_record
+GROUP BY Customer_state
+HAVING COUNT(DISTINCT order_id) >=100
+ORDER BY Average_delivery_days DESC;
+
+
+--Business Interpretation: -- There are total 24 states with atleast 100 delivered orders
+-- AM state have the total 26.43 highest average delivered duration whereas the SP recorded lowest 8.76
+--It is evident that more orders reduced the average delivery days which is SP state as 40494.
+--Furthermore, AM have less delivered orders and has 26.43 average delivery days
+
+
+
+--Q4. Freight Cost Analysis
+
+WITH Freight_with_orders AS (
+SELECT OD.order_id,
+DATE_TRUNC('month',OD.order_purchase_timestamp):: DATE AS Month, 
+SUM(OI.freight_value) AS freight_value
+FROM orders_dataset AS OD
+LEFT JOIN order_item_dataset AS OI
+ON OI.order_id = OD.order_id
+GROUP BY OD.order_id, month
+HAVING SUM(OI.freight_value)  IS NOT NULL)
+
+SELECT FO.month,
+COUNT(DISTINCT FO.order_id) AS total_orders,
+SUM(FO.freight_value) AS total_freight_cost,
+ROUND(AVG(FO.freight_value),2) AS Average_freight_cost
+FROM freight_with_orders AS FO
+GROUP BY FO.month
+ORDER BY FO.month DESC
+
+--Business Interpretation: As we expected that first and last month with lack of data which has less values to determine for the business decision
+--On 2017 november month recorded has highest orders 7451.Further, Mar,2018 period have cost more for the freight which is 171913.38 (Average : 23.92)
+-- Sep, 2016 recorded as highest average freight cost 29.13 whereas 2016, Dec 8.72 with single order.
+
+
+
+--Q5. Seller Delivery Performance
+
+WITH orders_with_sellers AS (
+SELECT OD.order_id,
+OD.order_purchase_timestamp,
+OD.order_delivered_customer_date,
+OI.seller_id,
+S.seller_city,
+S.seller_state
+FROM orders_Dataset AS OD
+INNER JOIN order_item_dataset AS OI
+	ON OI.order_id = OD.order_id
+LEFT JOIN sellers_dataset AS S
+	ON OI.seller_id = S.seller_id
+WHERE OD.order_status ='delivered'
+	AND OD.order_delivered_customer_Date IS NOT NULL
+	AND OD.order_purchase_timestamp IS NOT NULL
+	GROUP BY OD.order_id,
+OD.order_purchase_timestamp,
+OD.order_delivered_customer_date,
+OI.seller_id,
+S.seller_city,
+S.seller_state),
+
+Seller_performance AS (
+SELECT seller_id,
+seller_city,
+seller_state,
+COUNT(DISTINCT order_id) AS delivered_orders,
+AVG(
+EXTRACT(EPOCH FROM (order_delivered_customer_date - order_purchase_timestamp))/86400) AS average_delivery_days
+FROM orders_with_sellers
+GROUP BY seller_id,
+seller_city,
+seller_state
+HAVING COUNT(DISTINCT order_id) >=20
+)
+
+SELECT seller_id,
+seller_city,
+seller_state,
+delivered_orders,
+ROUND(average_delivery_days,2) AS Average_delivery_days
+FROM seller_performance
+ORDER BY average_delivery_days DESC
+LIMIT 10;
+
+--Business Interpretation :  the most average delivery days 31.73 is from SP -state &Sao Paulo - city with over 30 delivered order count
+--Majority is from SP seller state in the top 10 seller as per the requirement.
+--10th placed by SP/ Sao Paulo with over 56 delivered orders and recorded 23.24 as an average delivery duration days
+
+--Q6. Delivery Delay by product Category
+
+WITH product_cat_with_orders AS (
+SELECT OD.order_id,
+OD.order_purchase_timestamp,
+OD.order_delivered_customer_Date,
+OD.order_estimated_delivery_date,
+OI.product_id,
+P.product_category_name
+FROM orders_Dataset AS OD
+LEFT JOIN order_item_dataset AS OI
+ON OD.order_id = OI.order_id
+LEFT JOIN products_dataset AS P
+ON P.product_id = OI.product_id
+WHERE P.product_id IS NOT NULL AND 
+	OD.order_status = 'delivered' AND
+	OD.order_delivered_customer_Date IS NOT NULL AND
+	P.product_category_name IS NOT NULL)
+
+
+	SELECT product_category_name,
+	COUNT(DISTINCT order_id) AS Delivered_orders,
+	ROUND(AVG(EXTRACT(EPOCH FROM(order_delivered_customer_date - order_estimated_delivery_date))/86400),2) AS Average_delivery_delay
+	FROM product_cat_with_orders
+	GROUP BY product_category_name
+	HAVING COUNT(DISTINCT order_id)  >=100
+	ORDER BY Average_delivery_delay DESC;
+	
+--Business Interpretation : It is evident that moveis_escritorio is the more time spent 20.84 days with 1254 orders on the average delivery days so far.
+--There are total 51 retrieved for the delivered atleast 100 orders across product category
+--Alimentos product_category have the lowest average delivery days and recorded with 441 delivered orders.
+
+--Q7. Delivery Data Quality Check
+
+SELECT order_id,
+order_purchase_timestamp,
+order_delivered_customer_Date,
+order_status
+FROM orders_dataset
+WHERE  order_delivered_customer_Date < order_purchase_timestamp; 
+	
+--Business Interpretation: Findings with this output. it is evident that there is no delivery recorded before the purchase date.
+
+
+
+
+
+
+
+
+
+
